@@ -1,0 +1,3 @@
+# Copy this file to smtp_auth.yaml and fill in the mail account used to send alerts
+user: alerts@yourcompany.com
+password: change_me

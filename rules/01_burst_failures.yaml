@@ -1,0 +1,36 @@
+# Requirement 1: a service fails many times in a short time
+name: "Burst failures - 5 in 5 minutes"
+type: frequency
+
+index: "TODO-INDEX-*"            # TODO: from screenshot
+timestamp_field: "@timestamp"    # TODO: confirm from screenshot
+query_key: "TODO_SERVICE_FIELD"  # TODO: field holding the service name
+
+num_events: 5
+timeframe:
+  minutes: 5
+
+filter:
+- term:
+    isError: true
+
+# Alert again for the same service at most every 30 minutes
+realert:
+  minutes: 30
+
+alert:
+- email
+email:
+- "you@yourcompany.com"
+from_addr: "alerts@yourcompany.com"
+smtp_host: "smtp.yourcompany.com"
+smtp_port: 587
+smtp_auth_file: /opt/elastalert/smtp_auth.yaml
+
+alert_subject: "[ElastAlert] {0} failed {1} times in 5 minutes"
+alert_subject_args: [TODO_SERVICE_FIELD, num_hits]
+alert_text_type: alert_text_only
+alert_text: |
+  Service: {0}
+  Failures in the last 5 minutes: {1}
+alert_text_args: [TODO_SERVICE_FIELD, num_hits]

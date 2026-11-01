@@ -1,0 +1,11 @@
+services:
+  elastalert:
+    image: jertel/elastalert2:2.19.0
+    container_name: elastalert
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./config.yaml:/opt/elastalert/config.yaml:ro
+      - ./rules:/opt/elastalert/rules:ro
+      - ./smtp_auth.yaml:/opt/elastalert/smtp_auth.yaml:ro
+    command: ["--verbose"]

@@ -1,0 +1,24 @@
+# Global ElastAlert2 settings.
+# ES host, port, username and password come from .env
+# (ES_HOST, ES_PORT, ES_USERNAME, ES_PASSWORD, ES_USE_SSL).
+
+rules_folder: /opt/elastalert/rules
+
+# How often every rule is checked
+run_every:
+  minutes: 1
+
+# How far back each query looks (covers late-arriving logs)
+buffer_time:
+  minutes: 15
+
+# Index where ElastAlert stores its own state (created automatically)
+writeback_index: elastalert_status
+
+# Give up on a failed alert after this long
+alert_time_limit:
+  days: 2
+
+# If your cluster uses a self-signed certificate, uncomment one of these:
+# verify_certs: false
+# ca_certs: /opt/elastalert/ca.crt

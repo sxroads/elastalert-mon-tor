@@ -1,0 +1,41 @@
+# Requirement 3: a service fails more than X times in a day (rolling 24 hours)
+name: "Daily threshold - 50 in 24 hours"
+type: frequency
+
+index: "TODO-INDEX-*"            # TODO: from screenshot
+timestamp_field: "@timestamp"    # TODO: confirm from screenshot
+query_key: "TODO_SERVICE_FIELD"  # TODO: field holding the service name
+
+num_events: 50                   # this is X
+timeframe:
+  hours: 24
+
+# Ask ES for per-service counts instead of downloading every document (cheaper over 24h)
+use_terms_query: true
+terms_size: 100                  # max number of distinct services counted per query
+doc_type: _doc
+
+filter:
+- term:
+    isError: true
+
+# One alert per service per day
+realert:
+  hours: 24
+
+alert:
+- email
+email:
+- "you@yourcompany.com"
+from_addr: "alerts@yourcompany.com"
+smtp_host: "smtp.yourcompany.com"
+smtp_port: 587
+smtp_auth_file: /opt/elastalert/smtp_auth.yaml
+
+alert_subject: "[ElastAlert] {0} passed the daily failure limit"
+alert_subject_args: [TODO_SERVICE_FIELD]
+alert_text_type: alert_text_only
+alert_text: |
+  Service: {0}
+  Failures in the last 24 hours reached the limit (50).
+alert_text_args: [TODO_SERVICE_FIELD]
