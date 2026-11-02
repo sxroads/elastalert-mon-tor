@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="{{ refresh }}">
+<title>Service Errors Today</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #898781;
+    --grid: #e1e0d9;
+    --baseline: #c3c2b7;
+    --border: rgba(11,11,11,0.10);
+    --series-1: #2a78d6;
+    --critical: #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d;
+      --surface: #1a1a19;
+      --text-primary: #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted: #898781;
+      --grid: #2c2c2a;
+      --baseline: #383835;
+      --border: rgba(255,255,255,0.10);
+      --series-1: #3987e5;
+      --critical: #d03b3b;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --grid: #2c2c2a;
+    --baseline: #383835;
+    --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5;
+    --critical: #d03b3b;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 20px; }
+  h1 { font-size: 22px; margin: 0; }
+  h2 { font-size: 15px; margin: 0 0 12px; }
+  .meta { color: var(--text-secondary); font-size: 13px; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .stat .label { color: var(--text-secondary); font-size: 13px; }
+  .stat .value { font-size: 28px; font-weight: 600; }
+  .stat .value.alert { color: var(--critical); }
+
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-top: 16px; }
+
+  #hourly { position: relative; }
+  #hourly svg { display: block; width: 100%; height: 240px; overflow: visible; }
+  #hourly text { fill: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .tooltip {
+    position: absolute; pointer-events: none; display: none; white-space: nowrap;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 10px; font-size: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  }
+  .tooltip b { font-variant-numeric: tabular-nums; }
+
+  .barlist { list-style: none; margin: 0; padding: 0; }
+  .barlist li { display: grid; grid-template-columns: minmax(0, 1fr) 56px; gap: 4px 12px; padding: 6px 0; }
+  .barlist .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .barlist .count { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+  .barlist .track { grid-column: 1 / -1; height: 6px; }
+  .barlist .bar { height: 100%; min-width: 2px; background: var(--series-1); border-radius: 0 4px 4px 0; }
+
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--grid); }
+  th { color: var(--text-secondary); font-weight: 500; font-size: 13px; }
+  td.num, th.num { text-align: right; }
+  td.name { word-break: break-all; }
+
+  details { margin-top: 12px; }
+  summary { cursor: pointer; color: var(--text-secondary); font-size: 13px; }
+  .empty { color: var(--text-secondary); }
+  .error { border-color: var(--critical); color: var(--text-primary); }
+  .error code { word-break: break-all; }
+  .note { color: var(--text-muted); font-size: 12px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Service errors today</h1>
+    <div class="meta">Since 00:00 ({{ timezone }}) · updated {{ generated }} · refreshes every {{ refresh }}s</div>
+  </header>
+
+  {% if error %}
+  <div class="card error">
+    <h2>⚠ Could not read from Elasticsearch</h2>
+    <code>{{ error }}</code>
+  </div>
+  {% else %}
+
+  <section class="stats">
+    <div class="card stat"><div class="label">Errors today</div><div class="value">{{ "{:,}".format(report.total) }}</div></div>
+    <div class="card stat"><div class="label">Services with errors</div><div class="value">{{ report.service_count }}</div></div>
+    <div class="card stat">
+      <div class="label">Services over {{ threshold }} errors</div>
+      <div class="value {{ 'alert' if report.over_threshold }}">{{ report.over_threshold|length }}</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Errors per hour</h2>
+    <div id="hourly" role="img" aria-label="Bar chart of errors per hour today"></div>
+    <details>
+      <summary>Show as table</summary>
+      <table>
+        <thead><tr><th>Hour</th><th class="num">Errors</th></tr></thead>
+        <tbody>
+        {% for h in report.hours if h.count is not none %}
+          <tr><td>{{ h.label }}</td><td class="num">{{ h.count }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </details>
+  </section>
+
+  <div class="grid2">
+    <section class="card">
+      <h2>Top {{ top_n }} services by errors</h2>
+      {% if report.top %}
+      {% set max_count = report.top[0].count %}
+      <ul class="barlist">
+        {% for s in report.top %}
+        <li>
+          <span class="name" title="{{ s.name }}">{{ s.name }}</span>
+          <span class="count">{{ s.count }}</span>
+          <div class="track"><div class="bar" style="width: {{ (s.count / max_count * 100)|round(1) }}%"></div></div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="empty">No errors today.</p>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <h2>Services with more than {{ threshold }} errors today</h2>
+      {% if report.over_threshold %}
+      <table>
+        <thead><tr><th>#</th><th>Service</th><th class="num">Errors</th></tr></thead>
+        <tbody>
+        {% for s in report.over_threshold %}
+          <tr><td>{{ loop.index }}</td><td class="name">{{ s.name }}</td><td class="num">{{ s.count }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="empty">✓ No service has more than {{ threshold }} errors today.</p>
+      {% endif %}
+      {% if report.truncated %}
+      <p class="note">Only the first 1000 services are counted. Some services with few errors are not listed.</p>
+      {% endif %}
+    </section>
+  </div>
+  {% endif %}
+</main>
+
+{% if report %}
+<script>
+const HOURS = {{ report.hours|tojson }};
+
+function niceStep(max) {
+  const raw = max / 4;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const n = raw / mag;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag;
+}
+
+// Bar with 4px rounded top corners, flat at the baseline
+function barPath(x, y, w, h) {
+  const r = Math.min(4, w / 2, h);
+  return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`;
+}
+
+function drawHourly() {
+  const root = document.getElementById("hourly");
+  const W = root.clientWidth, H = 240;
+  const m = { t: 8, r: 4, b: 24, l: 40 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+
+  const max = Math.max(1, ...HOURS.map(d => d.count || 0));
+  const step = Math.max(1, niceStep(max));
+  const yMax = Math.ceil(max / step) * step;
+  const y = v => m.t + ih - (v / yMax) * ih;
+  const slot = iw / HOURS.length;
+  const bw = Math.max(1, slot - 2);  // 2px gap between bars
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+  for (let v = 0; v <= yMax; v += step) {
+    const color = v === 0 ? "var(--baseline)" : "var(--grid)";
+    svg += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="${color}" stroke-width="1"/>`;
+    svg += `<text x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${v.toLocaleString()}</text>`;
+  }
+  HOURS.forEach((d, i) => {
+    const x = m.l + i * slot + 1;
+    if (d.count) {
+      svg += `<path d="${barPath(x, y(d.count), bw, ih + m.t - y(d.count))}" fill="var(--series-1)"/>`;
+    }
+    if (i % 3 === 0) {
+      svg += `<text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle">${d.label}</text>`;
+    }
+    // Full-height invisible hit target for the tooltip
+    svg += `<rect x="${m.l + i * slot}" y="${m.t}" width="${slot}" height="${ih}" fill="transparent" data-i="${i}"/>`;
+  });
+  svg += `</svg><div class="tooltip"></div>`;
+  root.innerHTML = svg;
+
+  const tip = root.querySelector(".tooltip");
+  root.querySelectorAll("rect[data-i]").forEach(r => {
+    r.addEventListener("mousemove", e => {
+      const d = HOURS[r.dataset.i];
+      tip.innerHTML = d.count === null
+        ? `${d.label} · not yet`
+        : `${d.label} · <b>${d.count.toLocaleString()}</b> errors`;
+      tip.style.display = "block";
+      const box = root.getBoundingClientRect();
+      const left = Math.min(e.clientX - box.left + 12, box.width - tip.offsetWidth);
+      tip.style.left = `${Math.max(0, left)}px`;
+      tip.style.top = `${e.clientY - box.top - 36}px`;
+    });
+    r.addEventListener("mouseleave", () => { tip.style.display = "none"; });
+  });
+}
+
+drawHourly();
+window.addEventListener("resize", drawHourly);
+</script>
+{% endif %}
+</body>
+</html>

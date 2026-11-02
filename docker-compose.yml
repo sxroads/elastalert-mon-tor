@@ -1,11 +1,12 @@
 services:
-  elastalert:
-    image: jertel/elastalert2:2.19.0
-    container_name: elastalert
+  dashboard:
+    build: .
+    container_name: error-dashboard
     restart: unless-stopped
     env_file: .env
-    volumes:
-      - ./config.yaml:/opt/elastalert/config.yaml:ro
-      - ./rules:/opt/elastalert/rules:ro
-      - ./smtp_auth.yaml:/opt/elastalert/smtp_auth.yaml:ro
-    command: ["--verbose"]
+    ports:
+      - "8080:8080"
+    # If Elasticsearch uses a company CA certificate, put it next to this file,
+    # uncomment the line below and set ES_CA_CERT=/app/certs/ca.crt in .env
+    # volumes:
+    #   - ./ca.crt:/app/certs/ca.crt:ro

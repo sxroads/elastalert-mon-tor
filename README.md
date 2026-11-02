@@ -1,123 +1,104 @@
-# ElastAlert Monitor
+# Error Dashboard
 
-Sends an email when a service keeps failing, based on logs in our Elasticsearch.
-Runs [ElastAlert2](https://elastalert2.readthedocs.io/en/latest/) in Docker. There is no custom code: everything is configured in YAML.
+A small web page that shows **which services are failing today**, read live from our Elasticsearch.
+It runs in Docker. Open `http://<server>:8080` in a browser.
 
-> **Status: not runnable yet.** The rules still contain `TODO` placeholders. See [What we still need](#what-we-still-need).
+> **Status: not runnable yet.** The index name and the service field are still `TODO` placeholders in `.env`. See [What we still need](#what-we-still-need).
 
-## What it alerts on
+## What the page shows
 
-Every rule only looks at log documents where `isError: true`, and counts **each service separately**.
+All numbers count log documents where `isError: true`, from **00:00 today** in the configured time zone.
 
-| Rule | File | Fires when | Next alert for the same service |
-|---|---|---|---|
-| Burst failures | [rules/01_burst_failures.yaml](rules/01_burst_failures.yaml) | 5 failures within 5 minutes | after 30 min |
-| Recurring failures | [rules/02_recurring_failures.yaml](rules/02_recurring_failures.yaml) | 20 failures within 1 hour | after 1 hour |
-| Daily threshold | [rules/03_daily_threshold.yaml](rules/03_daily_threshold.yaml) | 50 failures within the last 24 hours | after 24 hours |
+| Section | Shows |
+|---|---|
+| Summary | total errors today · number of services with errors · number of services over the limit |
+| Errors per hour | bar chart for today, 00:00–23:00. Hover a bar for the exact count. "Show as table" lists the same numbers. |
+| Top 15 services | the 15 services with the most errors today, with bars for comparison |
+| Over the limit | **every** service with more than 15 errors today |
 
-These thresholds are starting guesses. We'll adjust them after testing against real data.
-"Day" means the last 24 hours as a rolling window, not since midnight.
+The page reloads itself every 60 seconds. You can change 15 / 15 / 60 in `.env` (`TOP_N`, `DAILY_THRESHOLD`, `REFRESH_SECONDS`).
 
 ## How it works
 
 ```
- Docker host                                  Elasticsearch
-┌─────────────────────────┐   HTTPS :9200   ┌────────────────────────────┐
-│ elastalert container    │ ──────────────▶ │ search log index           │
-│  every 1 minute:        │  user+password  │   (isError: true)          │
-│  query → count → alert  │ ──────────────▶ │ write own state to         │
-└───────────┬─────────────┘                 │   elastalert_status*       │
-            │ SMTP                          └────────────────────────────┘
-            ▼
-      email recipients
+ Browser ──HTTP :8080──▶ dashboard container ──HTTPS :9200──▶ Elasticsearch
+                         (Python / Flask)       user+password   (read-only)
 ```
 
-- ElastAlert connects to the **Elasticsearch REST API, not Kibana**.
-- It needs **read** access to the log index. It also needs **write** access to its own `elastalert_status*` indices, where it remembers what it already checked and already alerted on. This keeps it from sending duplicate alerts after a restart.
-- Nothing is installed on the Elastic side.
+- Each time the page loads, the app sends **one aggregation query** to Elasticsearch: errors since midnight, grouped per service and per hour. It returns counts only, never the log documents themselves, so the query is cheap.
+- It connects to the **Elasticsearch REST API, not Kibana**.
+- It only **reads**. Nothing is written to Elasticsearch and nothing is installed there.
+- If Elasticsearch can't be reached, the page shows the error message instead of numbers.
 
 ## Project layout
 
 ```
-docker-compose.yml        runs jertel/elastalert2
-config.yaml               global settings (run every 1 min, writeback index, TLS options)
-.env.example              Elasticsearch connection   → copy to .env
-smtp_auth.example.yaml    mail account login         → copy to smtp_auth.yaml
-rules/                    one YAML file per alert rule
+app/app.py                 Elasticsearch query + web server
+app/templates/index.html   the page (layout, tables, chart)
+app/requirements.txt       Python dependencies
+Dockerfile                 builds the image
+docker-compose.yml         runs it on port 8080
+.env.example               all settings → copy to .env
 ```
 
-`.env` and `smtp_auth.yaml` hold real credentials and are git-ignored. Never commit them.
+`.env` holds the real password and is git-ignored. Never commit it.
 
 ## What we still need
 
 ### From a sample log (screenshot from Kibana Discover)
-- [ ] **Index name / pattern**: replaces `TODO-INDEX-*` in all three rules
-- [ ] **Service name field**: replaces every `TODO_SERVICE_FIELD` in all three rules
-- [ ] **Timestamp field**: confirm it is `@timestamp`
-- [ ] **`isError` type**: is it a boolean `true` or the string `"true"`? This decides how the filter is written.
+- [ ] **Index name / pattern** → `ES_INDEX`
+- [ ] **Service name field** → `SERVICE_FIELD`. It must be a *keyword* field. If the field is text, use its `.keyword` version, e.g. `serviceName.keyword`.
+- [ ] **Timestamp field** → `TIMESTAMP_FIELD`. Confirm it is `@timestamp`.
+- [ ] **`isError` field** → `ERROR_FIELD`. Confirm the name and that it holds true/false.
 
 ### From the Elastic admin
-- [ ] **Elasticsearch URL and port** (not the Kibana URL)
-- [ ] **HTTPS?** If it uses a company/self-signed certificate, we need the **CA certificate file**
-- [ ] **A dedicated user**, e.g. `elastalert`, with this role:
+- [ ] **Elasticsearch URL and port** (not the Kibana URL) → `ES_URL`
+- [ ] **HTTPS?** If it uses a company/self-signed certificate, we need the **CA certificate file**.
+- [ ] **A read-only user**, e.g. `dashboard`, with this role:
 
   | Resource | Privileges |
   |---|---|
   | log index (e.g. `app-logs-*`) | `read`, `view_index_metadata` |
-  | `elastalert_status*` | `all` |
-  | cluster | `monitor` |
-
-### Mail
-- [ ] **SMTP server host and port**, and whether it uses STARTTLS (587) or SSL (465)
-- [ ] **Sender account**: address and password, or a relay that needs no login
-- [ ] **Recipients**: who should get the alerts
 
 ### Decisions
-- [ ] **Thresholds**: confirm or change 5/5 min, 20/1 h, and X = 50/day
-- [ ] **Rule 2 meaning**: currently "keeps failing over a longer period (1 hour)". Change it if something else was meant.
-- [ ] **Where it runs permanently**: an always-on server that can reach both Elasticsearch and the mail server
+- [ ] **Time zone** for "today": currently `Europe/Istanbul`
+- [ ] **Limits**: top 15 and "more than 15 errors". Keep or change?
+- [ ] **Where it runs**: a server that can reach Elasticsearch and that people can open in a browser
 
 ## Next steps
 
-1. **Fill in the placeholders** in `rules/*.yaml` once the sample log is available.
-2. **Check connectivity** from the machine that will run Docker:
+1. **Check connectivity** from the machine that will run Docker:
    ```bash
    # should return JSON with cluster_name and version
    curl -u USER:PASS https://ELASTIC_HOST:9200
 
-   # should return a count of failures
+   # should return a count of errors
    curl -u USER:PASS "https://ELASTIC_HOST:9200/YOUR-INDEX-*/_count?q=isError:true"
    ```
    | Result | Meaning |
    |---|---|
    | Timeout | network or firewall problem, or wrong host/port |
    | `401` | wrong username or password |
-   | SSL / certificate error | set `ca_certs` (or temporarily `verify_certs: false`) in `config.yaml` |
-3. **Create the credential files:**
+   | SSL / certificate error | use the CA file (see below), or set `ES_VERIFY_CERTS=false` for a quick test only |
+2. **Create `.env`** and fill in the values:
    ```bash
-   cp .env.example .env                       # fill in ES_HOST, ES_PORT, ES_USERNAME, ES_PASSWORD
-   cp smtp_auth.example.yaml smtp_auth.yaml   # fill in the mail account
+   cp .env.example .env
    ```
-   Also update `email`, `from_addr`, `smtp_host` and `smtp_port` in each rule.
-4. **Dry-run each rule against real past data.** This prints what would have fired and sends no email:
+   If you have a CA certificate, save it as `ca.crt` next to `docker-compose.yml`. Then uncomment the `volumes` lines in `docker-compose.yml` and set `ES_CA_CERT=/app/certs/ca.crt`.
+3. **Build and start:**
    ```bash
-   docker compose run --rm --entrypoint elastalert-test-rule elastalert \
-     --config /opt/elastalert/config.yaml --days 1 /opt/elastalert/rules/01_burst_failures.yaml
+   docker compose up -d --build
    ```
-   Repeat for `02_` and `03_`. Use `--days 7` to see a week.
-5. **Tune thresholds** based on the dry-run results, so alerts mean something and don't flood inboxes.
-6. **Start it:**
-   ```bash
-   docker compose up -d
-   docker compose logs -f
-   ```
-7. **Later (optional):** add Slack/Teams alerts, a "since midnight" daily count, or per-service thresholds.
+4. **Open** `http://localhost:8080`, or `http://<server-ip>:8080` from another machine.
+5. **Compare with Kibana.** Check the numbers against a Kibana Discover search for `isError: true`, time range "Today".
+6. **Later (optional):** a time-range picker (last 24 h / 7 days), errors per service over time, alerts again (email/Teams) on top of the same query.
 
 ## Useful commands
 
 ```bash
-docker compose ps            # is it running?
-docker compose logs -f       # live logs
-docker compose restart       # reload after editing rules or config
-docker compose down          # stop
+docker compose ps                 # is it running?
+docker compose logs -f            # app logs
+docker compose up -d --build      # rebuild after changing code or .env
+docker compose down               # stop
+curl http://localhost:8080/healthz
 ```
